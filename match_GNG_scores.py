@@ -5,10 +5,10 @@ import datetime
 from collections import defaultdict
 
 gngFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/processed_output/AllUsers_GNGdata_fromZIP_allResponseTimes.csv'
-IDlinkFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/ID_link.csv'
+IDlinkFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/ID_link_withDemographics.csv'
 smsFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_SMS.csv'
-interviewFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_Interview_Data_longFormat.csv'
-selfReportFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_Participant_Self-Report.csv'
+interviewFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_Interview_Data_longFormat-v2.csv'
+selfReportFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_Participant_Self-Report_01112024.csv'
 
 dfGNG = pd.read_csv(gngFile, index_col=False)
 dfIDs = pd.read_csv(IDlinkFile, index_col=False)
@@ -23,6 +23,11 @@ dfGNG = dfGNG.dropna(subset = ['studyID'])
 
 IDlist = dfGNG['studyID'].unique()
 # IDlist = IDlist[~(np.isnan(IDlist))]
+
+# make dictionaries for age/sex/gender
+dictAge = dict(zip(dfIDs['ID'], dfIDs['age']))
+dictSex = dict(zip(dfIDs['ID'], dfIDs['sex']))
+dictGender = dict(zip(dfIDs['ID'], dfIDs['gender']))
 
 # remove weird dates
 dfSMS['date'] = np.where(dfSMS['date'] == '1/0/00 0:00', float('NaN'), dfSMS['date'])
@@ -54,14 +59,17 @@ for ID in IDlist:
                                         grpSelfReport['date'].shift(1), (grpSelfReport['date'] - pd.Timedelta(30, unit='days')))
     
     # get age, sex, and gender
-    age = np.unique(grpSelfReport['age_baseline_pt'])
-    age = age[~np.isnan(age)][0]
-    sex = np.unique(grpSelfReport['baseline_sex'])
-    sex = sex[~np.isnan(sex)][0]
-    gender = np.unique(grpSelfReport['baseline_gender'])
-    gender = gender[~np.isnan(gender)][0]
+    age = dictAge.get(ID)
+    sex = dictSex.get(ID)
+    gender = dictGender.get(ID)
+    # age = np.unique(grpSelfReport['age_baseline_pt'])
+    # age = age[~np.isnan(age)][0]
+    # sex = np.unique(grpSelfReport['baseline_sex'])
+    # sex = sex[~np.isnan(sex)][0]
+    # gender = np.unique(grpSelfReport['baseline_gender'])
+    # gender = gender[~np.isnan(gender)][0]
 
-    
+
     dateList = grpGNG['date'].unique()
 
     for date in dateList:
@@ -104,14 +112,13 @@ for ID in IDlist:
         gngTask['interview_anx_score'] = interviewRow['anx_score'].mean()
 
 
-
         # self-report
         selfReportRow = grpSelfReport.loc[(grpSelfReport['date'] >= date) & (grpSelfReport['monthStart'] < date)]
 
         gngTask['self_report_dep_score'] = selfReportRow['self_report_depression'].mean()
         gngTask['self_report_mania_score'] = selfReportRow['self_report_mania'].mean()
-        gngTask['self_report_sleepDisturbance_score'] = selfReportRow['sleep_disturbance'].mean()
-        gngTask['self_report_anx_score'] = selfReportRow['sleep_disturbance'].mean()
+        # gngTask['self_report_sleepDisturbance_score'] = selfReportRow['sleep_disturbance'].mean()
+        gngTask['self_report_anx_score'] = selfReportRow['self_report_anxiety'].mean()
 
         # append GNG
         outGNG.append(gngTask)
@@ -132,7 +139,7 @@ dfOut = pd.concat(outGNG)
 # dfGNG['self_harm'] = dfGNG.apply(lambda x: dictSH[x['studyID']][x['date']], axis=1)
 
 
-dfOut.to_csv('/home/mindy/Desktop/BiAffect-iOS/vanMeter/gng/gng_sms_processed_output-v2.csv', index=False)
+dfOut.to_csv('/home/mindy/Desktop/BiAffect-iOS/vanMeter/gng/gng_sms_processed_output-v3.csv', index=False)
 
 #%%
 # # MATCH SMS TO EXACT GNG DATE
