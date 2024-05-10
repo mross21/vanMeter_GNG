@@ -1,7 +1,6 @@
 #%%
 import pandas as pd
 import numpy as np
-import datetime
 from collections import defaultdict
 
 gngFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/processed_output/AllUsers_GNGdata_fromZIP_allResponseTimes.csv'
@@ -40,13 +39,8 @@ dfInterview['weekDate'] = pd.to_datetime(dfInterview['weekDate']).dt.date
 dfInterview['weekDateEnd'] = pd.to_datetime(dfInterview['weekDateEnd']).dt.date
 dfSelfReport['date'] = pd.to_datetime(dfSelfReport['date']).dt.date
 
-
+# set output list
 outGNG = []
-# dictSleep = defaultdict(dict)
-# dictSI = defaultdict(dict)
-# dictDesire = defaultdict(dict)
-# dictIntent = defaultdict(dict)
-# dictSH = defaultdict(dict)
 
 for ID in IDlist:
     grpSMS = dfSMS.loc[dfSMS['ID'] == ID]
@@ -62,16 +56,11 @@ for ID in IDlist:
     age = dictAge.get(ID)
     sex = dictSex.get(ID)
     gender = dictGender.get(ID)
-    # age = np.unique(grpSelfReport['age_baseline_pt'])
-    # age = age[~np.isnan(age)][0]
-    # sex = np.unique(grpSelfReport['baseline_sex'])
-    # sex = sex[~np.isnan(sex)][0]
-    # gender = np.unique(grpSelfReport['baseline_gender'])
-    # gender = gender[~np.isnan(gender)][0]
 
-
+    # make list of all GNG dates
     dateList = grpGNG['date'].unique()
 
+    # loop through all GNG dates
     for date in dateList:
         # print(f'GNG date: {date}')
         gngTask = grpGNG.loc[grpGNG['date'] == date]
@@ -80,15 +69,18 @@ for ID in IDlist:
         gngTask['sex'] = sex
         gngTask['gender'] = gender
 
+        # get closest SMS values for each GNG up to one week
         # SMS
         grpSMS['diffDays'] = grpSMS['date'] - date
         matchDate = grpSMS.loc[grpSMS['diffDays'] == grpSMS['diffDays'].min()]
+        # if no SMS found, set values as NaN
         if len(matchDate) < 1:
             gngTask['sms_sleep'] = np.nan
             gngTask['sms_SI'] = np.nan
             gngTask['sms_desire'] = np.nan
             gngTask['sms_intent'] = np.nan
             gngTask['sms_self_harm'] = np.nan
+        # record SMS values if one week or less from GNG date
         elif grpSMS['diffDays'].min() <= pd.Timedelta(7,unit='days'):
             gngTask['sms_sleep'] = matchDate['sleep'].mean()
             gngTask['sms_SI'] = matchDate['si_current_y_n'].mean()
@@ -103,18 +95,17 @@ for ID in IDlist:
             gngTask['sms_self_harm'] = np.nan
 
         # INTERVIEW
+        # find interview values when GNG date is between interview week start/end
         interviewRow = grpInterview.loc[(grpInterview['weekDate'] <= date) & 
                                          (grpInterview['weekDateEnd'] >= date)]
-        
         gngTask['interview_dep_score'] = interviewRow['dep_score'].mean()
         gngTask['interview_SI_score'] = interviewRow['suic_score'].mean()
         gngTask['interview_mania_score'] = interviewRow['mania_score'].mean()
         gngTask['interview_anx_score'] = interviewRow['anx_score'].mean()
 
-
         # self-report
+        # find self-report values when GNG date is between self-report week start/end
         selfReportRow = grpSelfReport.loc[(grpSelfReport['date'] >= date) & (grpSelfReport['monthStart'] < date)]
-
         gngTask['self_report_dep_score'] = selfReportRow['self_report_depression'].mean()
         gngTask['self_report_mania_score'] = selfReportRow['self_report_mania'].mean()
         # gngTask['self_report_sleepDisturbance_score'] = selfReportRow['sleep_disturbance'].mean()
@@ -123,46 +114,10 @@ for ID in IDlist:
         # append GNG
         outGNG.append(gngTask)
 
+# concat all rows into one dataframe
 dfOut = pd.concat(outGNG)
-
-        # # dict of ID, date, and scores
-        # dictSleep[ID][date] = sleep
-        # dictSI[ID][date] = SI
-        # dictDesire[ID][date] = desire
-        # dictIntent[ID][date] = intent
-        # dictSH[ID][date]= sh
-
-# dfGNG['sleep'] = dfGNG.apply(lambda x: dictSleep[x['studyID']][x['date']], axis=1)
-# dfGNG['SI'] = dfGNG.apply(lambda x: dictSI[x['studyID']][x['date']], axis=1)
-# dfGNG['desire'] = dfGNG.apply(lambda x: dictDesire[x['studyID']][x['date']], axis=1)
-# dfGNG['intent'] = dfGNG.apply(lambda x: dictIntent[x['studyID']][x['date']], axis=1)
-# dfGNG['self_harm'] = dfGNG.apply(lambda x: dictSH[x['studyID']][x['date']], axis=1)
-
-
+# save output file
 dfOut.to_csv('/home/mindy/Desktop/BiAffect-iOS/vanMeter/gng/gng_sms_processed_output-v3.csv', index=False)
 
-#%%
-# # MATCH SMS TO EXACT GNG DATE
-# outGNG = []
-# for ID in IDlist:
-#     grpSMS = dfSMS.loc[dfSMS['ID'] == ID]
-
-#     dictSleep = dict(zip(grpSMS['date'], grpSMS['sleep']))
-#     dictSI = dict(zip(grpSMS['date'], grpSMS['si_current_y_n']))
-#     dictDesire = dict(zip(grpSMS['date'], grpSMS['desire_to_die']))
-#     dictIntent = dict(zip(grpSMS['date'], grpSMS['suicide_intent']))
-#     dictSH = dict(zip(grpSMS['date'], grpSMS['any_self_harm_y_n']))
-
-#     grpGNG = dfGNG.loc[dfGNG['studyID'] == ID]
-
-#     grpGNG['sleep'] = grpGNG['date'].map(dictSleep)
-#     grpGNG['SI'] = grpGNG['date'].map(dictSI)
-#     grpGNG['desire'] = grpGNG['date'].map(dictDesire)
-#     grpGNG['intent'] = grpGNG['date'].map(dictIntent)
-#     grpGNG['self_harm'] = grpGNG['date'].map(dictSH)
-
-#     outGNG.append(grpGNG)
-
-# dfGNGOut = pd.concat(outGNG,axis=0,ignore_index=True)
-
+print('finish')
 # %%
