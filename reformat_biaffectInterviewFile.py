@@ -30,7 +30,6 @@ for d in dfList:
     dfLong.insert(6, 'weekDateEnd', dfLong['psr_enddate'] - (dfLong['weekFromEnd'] * pd.Timedelta(7, 'days')))
 
     dfOut = pd.merge(dfOut, dfLong, how='outer')
-    
 
 dfOut.to_csv('/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_Interview_Data_longFormat-v2.csv', index=False)
 
