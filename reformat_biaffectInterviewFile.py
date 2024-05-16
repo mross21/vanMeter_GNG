@@ -1,7 +1,8 @@
 #%%
 import pandas as pd
 
-file = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_Interview_Data_01112024.csv'
+# file = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_Interview_Data_01112024.csv'
+file = 'BiAffect_PRS_Data_05132024.csv'
 df = pd.read_csv(file, index_col=False)
 
 df['psr_startdate'] = pd.to_datetime(df['psr_startdate']).dt.date
@@ -31,6 +32,6 @@ for d in dfList:
 
     dfOut = pd.merge(dfOut, dfLong, how='outer')
 
-dfOut.to_csv('/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_Interview_Data_longFormat-v2.csv', index=False)
+# dfOut.to_csv('/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_Interview_Data_longFormat-v3.csv', index=False)
 
 # %%
