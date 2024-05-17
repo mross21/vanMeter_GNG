@@ -6,7 +6,7 @@ from collections import defaultdict
 gngFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/processed_output/AllUsers_GNGdata_fromZIP_allResponseTimes.csv'
 IDlinkFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/ID_link_withDemographics.csv'
 smsFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_SMS.csv'
-interviewFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_Interview_Data_longFormat-v2.csv'
+interviewFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_Interview_Data_longFormat-v3.csv'
 selfReportFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_Participant_Self-Report_01112024.csv'
 
 dfGNG = pd.read_csv(gngFile, index_col=False)
@@ -80,6 +80,13 @@ for ID in IDlist:
             gngTask['sms_desire'] = np.nan
             gngTask['sms_intent'] = np.nan
             gngTask['sms_self_harm'] = np.nan
+        # skip if min gap is greater than 1 week
+        elif abs(matchDate['diffDays'].min()) > pd.Timedelta(7,'days'):
+            gngTask['sms_sleep'] = np.nan
+            gngTask['sms_SI'] = np.nan
+            gngTask['sms_desire'] = np.nan
+            gngTask['sms_intent'] = np.nan
+            gngTask['sms_self_harm'] = np.nan
         # record SMS values if one week or less from GNG date
         elif grpSMS['diffDays'].min() <= pd.Timedelta(7,unit='days'):
             gngTask['sms_sleep'] = matchDate['sleep'].mean()
@@ -117,7 +124,7 @@ for ID in IDlist:
 # concat all rows into one dataframe
 dfOut = pd.concat(outGNG)
 # save output file
-dfOut.to_csv('/home/mindy/Desktop/BiAffect-iOS/vanMeter/gng/gng_sms_processed_output-v3.csv', index=False)
+dfOut.to_csv('/home/mindy/Desktop/BiAffect-iOS/vanMeter/gng/gng_sms_processed_output-v4.csv', index=False)
 
 print('finish')
 # %%
