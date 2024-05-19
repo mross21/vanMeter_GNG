@@ -4,7 +4,7 @@ import numpy as np
 from collections import defaultdict
 
 gngFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/processed_output/AllUsers_GNGdata_fromZIP_allResponseTimes.csv'
-IDlinkFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/ID_link_withDemographics.csv'
+IDlinkFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/ID_link_updated_05182024.csv'
 smsFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_SMS.csv'
 interviewFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_Interview_Data_longFormat-v3.csv'
 selfReportFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_Participant_Self-Report_01112024.csv'
@@ -25,7 +25,7 @@ IDlist = dfGNG['studyID'].unique()
 
 # make dictionaries for age/sex/gender
 dictAge = dict(zip(dfIDs['ID'], dfIDs['age']))
-dictSex = dict(zip(dfIDs['ID'], dfIDs['sex']))
+# dictSex = dict(zip(dfIDs['ID'], dfIDs['sex']))
 dictGender = dict(zip(dfIDs['ID'], dfIDs['gender']))
 
 # remove weird dates
@@ -54,7 +54,7 @@ for ID in IDlist:
     
     # get age, sex, and gender
     age = dictAge.get(ID)
-    sex = dictSex.get(ID)
+    # sex = dictSex.get(ID)
     gender = dictGender.get(ID)
 
     # make list of all GNG dates
@@ -66,7 +66,7 @@ for ID in IDlist:
         gngTask = grpGNG.loc[grpGNG['date'] == date]
 
         gngTask['age'] = age
-        gngTask['sex'] = sex
+        # gngTask['sex'] = sex
         gngTask['gender'] = gender
 
         # get closest SMS values for each GNG up to one week
