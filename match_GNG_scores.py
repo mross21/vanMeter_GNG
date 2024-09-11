@@ -1,7 +1,8 @@
-#%%
+"""
+@author: Mindy Ross
+python version 3.7.4
+"""
 import pandas as pd
-import numpy as np
-from collections import defaultdict
 
 gngFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/processed_output/AllUsers_GNGdata_allResponseTimes_2024-09-10.csv'
 IDlinkFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/ID_link_updated_09102024.csv'
@@ -127,4 +128,3 @@ dfOut = pd.concat(outGNG)
 dfOut.to_csv('/home/mindy/Desktop/BiAffect-iOS/vanMeter/gng/gng_interview_processed_output-v5.csv', index=False)
 
 print('finish')
-# %%

@@ -1,7 +1,9 @@
-#%%
+"""
+@author: Mindy Ross
+python version 3.7.4
+"""
 import pandas as pd
 
-# file = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_Interview_Data_01112024.csv'
 file = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_PRS_Data_09092024.csv'
 df = pd.read_csv(file, index_col=False)
 
@@ -34,4 +36,4 @@ for d in dfList:
 
 dfOut.to_csv('/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_Interview_Data_longFormat-v4.csv', index=False)
 
-# %%
+

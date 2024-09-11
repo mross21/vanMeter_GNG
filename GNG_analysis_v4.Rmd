@@ -1,0 +1,484 @@
+---
+title: "GNG Analysis"
+author: "Mindy Ross"
+date: "Updated `r Sys.Date()`"
+output: bookdown::html_document2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+# Data processing
+
+<!-- SMS scores were matched to GNG task dates by matching the nearest SMS date to the GNG task date up to 7 days apart. If there were two SMS dates the same number of days apart, the mean scores were taken. -->
+
+Interview scores were matched to GNG task by matching the GNG date to the week during which the interviews were taken.
+
+<!-- Self-report scores were matched to GNG task by matching the GNG date to the month the self-reports reflected. -->
+
+```{r}
+# import libraries
+library(readr)
+library(tidyverse)
+library(tableone)
+library(lmerTest)
+library(sjPlot)
+library(effects)
+library(ggpubr)
+
+
+# read in GNG file
+f <- '/home/mindy/Desktop/BiAffect-iOS/vanMeter/gng/gng_interview_processed_output-v5.csv'
+dfRaw <- read.csv(f)
+# dfRaw$sex <- factor(dfRaw$sex)
+dfRaw$gender <- factor(dfRaw$gender)
+dfRaw$hour <-as.numeric(lubridate::hour(dfRaw$sessionTimestampLocal))
+dfRaw$hour <- lubridate::hour(dfRaw$sessionTimestampLocal)
+dfRaw$hour2 <- ifelse(dfRaw$hour == 0,24,dfRaw$hour)
+# add 1 sec as the correct no-go rxn time
+dfRaw$rxnTimeToPlot <- with(dfRaw, ifelse((go == 'False') & (incorrect == 'False'), 1, timeToThreshold_all))
+
+set.seed(123)
+dfPlot <- dfRaw %>% filter((rxnTimeToPlot >= 0.2) & (rxnTimeToPlot <= 1) & (hour2 > 6)) %>% # filter out rxn times < 0.2 and > 1 sec, and between 0100 to 0700
+              mutate(trial_type = factor(ifelse((go=='True')&(incorrect=='False'), 0, #correct go
+                                         ifelse((go=='False')&(incorrect=='True'), 1, #incorrect no go
+                                         ifelse((go=='False')&(incorrect=='False'), 2, NA))), # correct no go
+                    levels = c(0,1,2), labels = c('correct_go_trial','incorrect_noGo_trial','correct_noGo_trial'))) %>% 
+                    ungroup() #%>% #group_by(userID) %>% mutate(hour_range = max(hour) - min(hour)) %>% 
+                    # filter((hour_range >= 5) & (max(taskNumber) >= 3))
+                     #%>% ungroup() %>%
+                     # drop_na(age)
+                                                                                                
+
+dfRxn <- dfRaw %>% filter((timeToThreshold_all >= 0.2) & (timeToThreshold_all <= 1) & (hour2 >= 6) & (gender != 3)) %>% # filter out rxn times < 0.2 and > 1 sec, and between 0100 to 0700
+                mutate(rxnTime =log(timeToThreshold_all),
+                     rxnTime_shuffled = sample(rxnTime),
+                     trial_type = factor(ifelse((go=='True'), 0,1),
+                                  levels = c(0,1), labels = c('Go Trial','No-Go Trial'))) %>% 
+                ungroup() %>% #group_by(userID) %>% mutate(hour_range = max(hour2) - min(hour2)) %>% 
+                          #filter((hour_range >= 5) & (max(taskNumber) >= 3)) %>% ungroup() %>% 
+                 drop_na(interview_dep_score,age)
+
+# dfRxnSR <- dfRaw %>% filter((timeToThreshold_all >= 0.2) & (timeToThreshold_all <= 1) & (hour2 >= 6)) %>% 
+#                 mutate(rxnTime =log(timeToThreshold_all),
+#                      rxnTime_shuffled = sample(rxnTime),
+#                      trial_type = factor(ifelse((go=='True'), 0,1),
+#                                   levels = c(0,1), labels = c('Go Trial','No-Go Trial'))) %>% 
+#                 ungroup %>% #group_by(userID) %>% mutate(hour_range = max(hour2) - min(hour2)) %>% 
+#                           #filter((hour_range >= 5) & (max(taskNumber) >= 3)) %>% ungroup() %>% 
+#                  drop_na(age, sms_sleep,self_report_dep_score) %>%
+#           select(-c(interview_dep_score,interview_anx_score, interview_SI_score, interview_mania_score, timezone))
+
+set.seed(1234)
+dfAccuracy <- dfRaw %>% filter((go == 'False') & (hour2 > 6) & (gender != 3)) %>% # filter out go trials and between midnight to 0700
+                mutate(nogo_flag = factor(ifelse(incorrect == 'False',1,0),levels=c(0,1),labels=c('Incorrect','Correct')), #incorrect=0, correct=1
+                       nogo_flag_shuffled = sample(nogo_flag)) %>%
+              ungroup %>% #group_by(userID) %>% mutate(hour_range = max(hour2) - min(hour2)) %>% 
+                          #filter((hour_range >= 5) & (max(taskNumber) >= 3)) %>% ungroup() %>% 
+                 drop_na(interview_dep_score,age)
+
+# dfAccuracySR <- dfRaw %>% filter((go == 'False') & (hour2 > 6)) %>% 
+#                 mutate(nogo_flag = factor(ifelse(incorrect == 'False',1,0),levels=c(0,1),labels=c('Incorrect','Correct')), #incorrect=0, correct=1
+#                        nogo_flag_shuffled = sample(nogo_flag)) %>%
+#               ungroup %>% #group_by(userID) %>% mutate(hour_range = max(hour2) - min(hour2)) %>% 
+#                           #filter((hour_range >= 5) & (max(taskNumber) >= 3)) %>% ungroup() %>% 
+#                  drop_na(age, sms_sleep, self_report_dep_score)
+
+# interview data summary table
+dfTab <- dfRxn %>% group_by(userID) %>%
+                summarise(age = unique(age),
+                          # sex = unique(sex),
+                          gender = unique(gender),
+                          # sleep = mean(sms_sleep),
+                          # SI = mean(sms_SI),
+                          # desire = mean(sms_desire),
+                          # intent = mean(sms_intent),
+                          # self_harm = mean(sms_self_harm),
+                          interview_dep = mean(interview_dep_score),
+                          interview_mania = mean(interview_mania_score),
+                          interview_anxiety = mean(interview_anx_score),
+                          interview_SI = mean(interview_SI_score),
+                          nGNG = max(taskNumber))
+
+# # self-report data summary table
+# dfTabSR <- dfRxnSR %>% group_by(userID) %>%
+#                 summarise(age = unique(age),
+#                           sex = unique(sex),
+#                           gender = unique(gender),
+#                           sleep = mean(sms_sleep),
+#                           SI = mean(sms_SI),
+#                           desire = mean(sms_desire),
+#                           intent = mean(sms_intent),
+#                           self_harm = mean(sms_self_harm),
+#                           SR_dep = mean(self_report_dep_score),
+#                           SR_mania = mean(self_report_mania_score),
+#                           SR_anxiety = mean(self_report_anx_score),
+#                           nGNG = max(taskNumber))
+
+# colSums(is.na(dfAccuracySR))
+# colSums(is.na(dfRxnSR))
+```
+
+## Assessment/GNG Summary
+
+Number of participants varied based on use of interview or self-report variables due to missing values, so separate models were created using one or the other assessment type.
+
+### Interview Variables
+
+```{r}
+tab3 <- CreateTableOne(data = subset(dfTab, select=-c(userID)))
+ptables <- print(tab3,  quote = FALSE, noSpaces = TRUE, printToggle = FALSE, test = TRUE, showAllLevels = FALSE, missing = FALSE, varLabels = TRUE )
+ptables
+```
+
+<!-- ### Self-Report Variables -->
+
+<!-- ```{r} -->
+<!-- tab3sr <- CreateTableOne(data = subset(dfTabSR, select=-c(userID))) -->
+<!-- ptablessr <- print(tab3sr,  quote = FALSE, noSpaces = TRUE, printToggle = FALSE, test = TRUE, showAllLevels = FALSE, missing = FALSE, varLabels = TRUE ) -->
+<!-- ptablessr -->
+<!-- ``` -->
+
+## GNG distributions
+
+**Hourly task distribution**
+
+```{r}
+hist(dfRaw$hour, breaks=25)
+```
+
+GNG tasks tend to be completed between the hours of 6-24 (0600-0059). Data filtered in model to only include tasks completed during these hours.
+
+**GNG Reaction Time**
+
+All GNG reaction times (correct and incorrect trials) following filtering to between 0.2 - 1 sec.
+
+```{r}
+hist(exp(dfRxn$rxnTime))
+```
+
+GNG reaction time per trial (correct and incorrect trials) was logged in the models
+
+```{r}
+hist(dfRxn$rxnTime)
+```
+
+**Comparison of reaction time by trial type**
+
+```{r}
+dfRxn %>% group_by(trial_type) %>% summarise(mean_reaction_time = mean(exp(rxnTime)),
+                                             median_reaction_time = median(exp(rxnTime)),
+                                             min_reaction_time = min(exp(rxnTime)),
+                                             max_reaction_time = max(exp(rxnTime)),
+                                             q1 = quantile(exp(rxnTime), .25),
+                                             q3 = quantile(exp(rxnTime), .75),
+                                             std = sd(exp(rxnTime)))
+```
+
+```{r}
+ggplot(dfRxn, aes(x=exp(rxnTime), group = trial_type)) + 
+  geom_boxplot(aes(fill=trial_type)) +
+  xlab("Reaction Time")+
+  ylab("Trial Type")+
+  theme_bw()+
+  theme(text=element_text(face="bold", size=12),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(fill = NA, colour = "NA"),
+        axis.line = element_line(size = 1, colour = "grey80"),
+        legend.title=element_blank())
+```
+
+## Spaghetti Plots
+
+Correct no-go trials given a reaction time of 1 sec in the plots below to visualize their frequency relative to the other trials with reaction times. Incorrect go trials were not plotted.
+
+```{r,fig.width=12,fig.height=12}
+ggplot(dfPlot, aes(x=jitter(hour2), y=jitter(rxnTimeToPlot), trial_type)) + 
+      geom_point(size=0.25, aes(color=trial_type, shape=trial_type), alpha=0.7) + 
+      scale_color_manual(values=c('#56B4E9','red','chartreuse4')) +
+      scale_shape_manual(values=c(3,19,3)) +
+      ylab('Reaction Time (s)') + xlab('Hour')+
+      facet_wrap(~userID)
+```
+
+# Regression Analyses
+
+## No-Go Trial Accuracy
+
+Logistic regression model
+
+### Interview Variables
+
+<!-- 12 participants -->
+
+```{r}
+model1Nogo <- glm(nogo_flag ~ scale(age) + gender +
+                    #scale(sms_sleep) + #scale(sms_SI) + 
+                     scale(interview_SI_score) +
+                    # scale(sms_self_harm) + 
+                    scale(interview_dep_score) +
+                      #scale(interview_anx_score) + #scale(interview_mania_score) +
+                      scale(log(taskNumber)),# + poly(hour2,2, raw=FALSE), 
+                  data = dfAccuracy, family = 'binomial')
+summary(model1Nogo)
+```
+
+#### Check for multicolinearity 
+
+```{r}
+car::vif(model1Nogo)
+```
+
+<!-- ### Self Report Variables -->
+
+<!-- 12 participants -->
+
+<!-- ```{r} -->
+<!-- model1NogoSR <- glm(nogo_flag ~ scale(age) + #gender + -->
+<!--                       scale(sms_sleep) +  -->
+<!--                        # scale(sms_SI) + #scale(sms_self_harm) + -->
+<!--                     scale(self_report_dep_score) + -->
+<!--                       scale(self_report_anx_score) + -->
+<!--                        # scale(self_report_mania_score) + -->
+<!--                       scale(log(taskNumber)),# + poly(hour2,2, raw=FALSE), -->
+<!--                     data = dfAccuracySR, family = 'binomial') -->
+<!-- summary(model1NogoSR) -->
+<!-- ``` -->
+
+<!-- #### Check for multicolinearity  -->
+
+<!-- ```{r} -->
+<!-- car::vif(model1NogoSR) -->
+<!-- ``` -->
+
+### Model Summary
+
+```{r}
+tab_model(model1Nogo,digits=3, digits.re = 3,show.ci=FALSE, show.loglik = TRUE, show.obs = TRUE, show.ngroups = TRUE, show.icc=TRUE)
+```
+
+<!-- Note: Orthogonal polynomials of hour were fitted in the model, so their model estimates/odds ratios are uninterpretable. -->
+
+<!-- ### Task Number -->
+
+<!-- Model with interview variables -->
+
+<!-- ```{r} -->
+<!-- effectNumNogo <- as.data.frame(effects::Effect('taskNumber', model1NogoSR)) -->
+<!-- ggplot(data=effectNumNogo, aes(x=taskNumber, y=fit))+ -->
+<!--   geom_line(size=1)+ -->
+<!--   geom_ribbon(aes(ymin=lower, ymax=upper),alpha=.2) + -->
+<!--   xlab("Task Number")+ -->
+<!--   ylab("No-Go Trial Accuracy")+ -->
+<!--   theme_bw()+ -->
+<!--   theme(text=element_text(face="bold", size=12), -->
+<!--         panel.grid.major = element_blank(), -->
+<!--         panel.grid.minor = element_blank(), -->
+<!--         panel.border = element_rect(fill = NA, colour = "NA"), -->
+<!--         axis.line = element_line(size = 1, colour = "grey80"), -->
+<!--         legend.title=element_blank()) -->
+<!-- ``` -->
+
+<!-- ### SMS SI -->
+
+<!-- Model with self-report variables -->
+
+<!-- ```{r} -->
+<!-- effectNumNogo <- as.data.frame(effects::Effect('sms_SI', model1NogoSR)) -->
+<!-- ggplot(data=effectNumNogo, aes(x=sms_SI, y=fit))+ -->
+<!--   geom_line(size=1)+ -->
+<!--   geom_ribbon(aes(ymin=lower, ymax=upper),alpha=.2) + -->
+<!--   xlab("SMS SI")+ -->
+<!--   ylab("No-Go Trial Accuracy")+ -->
+<!--   theme_bw()+ -->
+<!--   theme(text=element_text(face="bold", size=12), -->
+<!--         panel.grid.major = element_blank(), -->
+<!--         panel.grid.minor = element_blank(), -->
+<!--         panel.border = element_rect(fill = NA, colour = "NA"), -->
+<!--         axis.line = element_line(size = 1, colour = "grey80"), -->
+<!--         legend.title=element_blank()) -->
+<!-- ``` -->
+
+<!-- ### SMS Self-Harm -->
+
+<!-- Model with self-report variables -->
+
+<!-- ```{r} -->
+<!-- effectNumNogo <- as.data.frame(effects::Effect('sms_self_harm', model1NogoSR)) -->
+<!-- ggplot(data=effectNumNogo, aes(x=sms_self_harm, y=fit))+ -->
+<!--   geom_line(size=1)+ -->
+<!--   geom_ribbon(aes(ymin=lower, ymax=upper),alpha=.2) + -->
+<!--   xlab("SMS Self-Harm")+ -->
+<!--   ylab("No-Go Trial Accuracy")+ -->
+<!--   theme_bw()+ -->
+<!--   theme(text=element_text(face="bold", size=12), -->
+<!--         panel.grid.major = element_blank(), -->
+<!--         panel.grid.minor = element_blank(), -->
+<!--         panel.border = element_rect(fill = NA, colour = "NA"), -->
+<!--         axis.line = element_line(size = 1, colour = "grey80"), -->
+<!--         legend.title=element_blank()) -->
+<!-- ``` -->
+
+<!-- ### Self-Report Anxiety -->
+
+<!-- Model with self-report variables -->
+
+<!-- ```{r} -->
+<!-- effectNumNogo <- as.data.frame(effects::Effect('self_report_anx_score', model1NogoSR)) -->
+<!-- ggplot(data=effectNumNogo, aes(x=self_report_anx_score, y=fit))+ -->
+<!--   geom_line(size=1)+ -->
+<!--   geom_ribbon(aes(ymin=lower, ymax=upper),alpha=.2) + -->
+<!--   xlab("Self-Report Anxiety")+ -->
+<!--   ylab("No-Go Trial Accuracy")+ -->
+<!--   theme_bw()+ -->
+<!--   theme(text=element_text(face="bold", size=12), -->
+<!--         panel.grid.major = element_blank(), -->
+<!--         panel.grid.minor = element_blank(), -->
+<!--         panel.border = element_rect(fill = NA, colour = "NA"), -->
+<!--         axis.line = element_line(size = 1, colour = "grey80"), -->
+<!--         legend.title=element_blank()) -->
+<!-- ``` -->
+
+## Reaction Time
+
+Regression model
+
+### Interview variables
+
+<!-- 12 participants -->
+
+```{r}
+model1Rxn <- lm(rxnTime ~ scale(age) + gender +
+                    #scale(sms_sleep) + scale(sms_SI) + 
+                  scale(interview_SI_score) +
+                  #scale(sms_self_harm) +
+                    scale(interview_dep_score) +
+                      # scale(interview_anx_score) + #scale(interview_mania_score) +
+                    trial_type + scale(log(taskNumber)),# + poly(hour2,2, raw=FALSE),
+                  data = dfRxn)
+summary(model1Rxn)
+```
+
+#### Check for multicolinearity 
+
+```{r}
+car::vif(model1Rxn)
+```
+
+<!-- ### Self-Report Variables -->
+
+<!-- 12 participants -->
+
+<!-- ```{r} -->
+<!-- model1RxnSR <- lm(rxnTime ~ scale(age) + #gender + -->
+<!--                     scale(sms_sleep) + #scale(sms_SI) +  -->
+<!--                     scale(self_report_dep_score) + -->
+<!--                     scale(self_report_anx_score) + #scale(self_report_mania_score) + -->
+<!--                     trial_type + scale(log(taskNumber)),# + poly(hour2,2, raw=FALSE), -->
+<!--                   data = dfRxnSR) -->
+<!-- summary(model1RxnSR) -->
+<!-- ``` -->
+
+<!-- #### Check for multicolinearity  -->
+
+<!-- ```{r} -->
+<!-- car::vif(model1RxnSR) -->
+<!-- ``` -->
+
+### Model Summary
+
+```{r}
+tab_model(model1Rxn,digits=3, digits.re = 3,p.val = 'satterthwaite',show.ci=FALSE, show.loglik = TRUE, show.obs = TRUE, show.ngroups = TRUE, show.icc=TRUE)
+```
+
+### Age
+
+```{r}
+effectTrialRxn <- as.data.frame(Effect(c('age'), model1Rxn))
+ggplot(data=effectTrialRxn, aes(x=age, y=exp(fit)))+
+  geom_line(size=1)+
+  geom_ribbon(aes(ymin=exp(lower), ymax=exp(upper)),alpha=.2) +
+  xlab("Age")+
+  ylab("GNG Reaction Time (s)")+
+  theme_bw()+
+  theme(text=element_text(face="bold", size=12),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(fill = NA, colour = "NA"),
+        axis.line = element_line(size = 1, colour = "grey80"),
+        legend.title=element_blank())
+```
+
+### Gender
+
+```{r}
+effectTrialRxn <- as.data.frame(Effect(c('gender'), model1Rxn))
+ggplot(data=effectTrialRxn, aes(x=gender, y=exp(fit)))+
+  geom_point(size = 4)+
+  geom_errorbar(aes(ymin=exp(lower), ymax=exp(upper)),alpha=.5, size = 1) +
+  xlab("Gender")+
+  ylab("GNG Reaction Time (s)")+
+  theme_bw()+
+  theme(text=element_text(face="bold", size=12),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(fill = NA, colour = "NA"),
+        axis.line = element_line(size = 1, colour = "grey80"),
+        legend.title=element_blank())
+```
+
+### Trial Type
+
+```{r}
+effectTrialRxn <- as.data.frame(Effect(c('trial_type'), model1Rxn))
+ggplot(data=effectTrialRxn, aes(x=trial_type, y=exp(fit)))+
+  geom_point(size = 4)+
+  geom_errorbar(aes(ymin=exp(lower), ymax=exp(upper)),alpha=.5, size = 1) +
+  xlab("Trial Type")+
+  ylab("GNG Reaction Time (s)")+
+  theme_bw()+
+  theme(text=element_text(face="bold", size=12),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(fill = NA, colour = "NA"),
+        axis.line = element_line(size = 1, colour = "grey80"),
+        legend.title=element_blank())
+```
+
+### Interview SI Score
+
+```{r}
+effectTrialRxn <- as.data.frame(Effect(c('interview_SI_score'), model1Rxn))
+ggplot(data=effectTrialRxn, aes(x=interview_SI_score, y=exp(fit)))+
+  geom_line(size=1)+
+  geom_ribbon(aes(ymin=exp(lower), ymax=exp(upper)),alpha=.2) +
+  xlab("Interview SI Score")+
+  ylab("GNG Reaction Time (s)")+
+  theme_bw()+
+  theme(text=element_text(face="bold", size=12),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(fill = NA, colour = "NA"),
+        axis.line = element_line(size = 1, colour = "grey80"),
+        legend.title=element_blank())
+```
+
+### Interview Depression Score
+
+```{r}
+effectTrialRxn <- as.data.frame(Effect(c('interview_dep_score'), model1Rxn))
+ggplot(data=effectTrialRxn, aes(x=interview_dep_score, y=exp(fit)))+
+  geom_line(size=1)+
+  geom_ribbon(aes(ymin=exp(lower), ymax=exp(upper)),alpha=.2) +
+  xlab("Interview Depression Score")+
+  ylab("GNG Reaction Time (s)")+
+  theme_bw()+
+  theme(text=element_text(face="bold", size=12),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_rect(fill = NA, colour = "NA"),
+        axis.line = element_line(size = 1, colour = "grey80"),
+        legend.title=element_blank())
+```
