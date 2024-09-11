@@ -1,4 +1,9 @@
-#%%
+"""
+@author: Mindy Ross
+python version 3.7.4
+"""
+## NO LONGER NEEDED
+
 import pandas as pd
 
 demoFile = '/home/mindy/Desktop/BiAffect-iOS/vanMeter/raw_input/BiAffect_Participant_Self-Report.csv'
